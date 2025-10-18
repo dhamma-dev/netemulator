@@ -1,0 +1,74 @@
+# Docker Compose for NetEmulator with observability stack
+# Note: NetEmulator itself requires privileged mode for network operations
+
+version: '3.8'
+
+services:
+  # NetEmulator API (requires privileged mode)
+  # Note: In production, run on host for better network performance
+  netemulator-api:
+    image: netemulator:latest
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./topologies:/app/topologies
+      - ./logs:/app/logs
+    environment:
+      - LOG_LEVEL=INFO
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus
+    restart: unless-stopped
+
+  # Prometheus for metrics
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    restart: unless-stopped
+
+  # Grafana for dashboards
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../dashboards:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=
+    restart: unless-stopped
+
+  # Loki for log aggregation
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  # Promtail for log shipping
+  promtail:
+    image: grafana/promtail:latest
+    volumes:
+      - ../logs:/var/log/netemulator
+      - ./promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+

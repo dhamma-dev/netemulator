@@ -1,0 +1,33 @@
+# Simple 3-Node Topology for Testing
+# Basic topology with one impairment scenario
+
+topology:
+  name: simple_3node
+  
+  nodes:
+    - id: h1
+      type: host
+      services: [http]
+    
+    - id: r1
+      type: router
+      asn: 65100
+      daemons: [ospf]
+    
+    - id: h2
+      type: host
+      services: [dns]
+  
+  links:
+    - [h1, r1, {bw: 100m, delay: 5ms}]
+    - [r1, h2, {bw: 100m, delay: 5ms}]
+
+scenarios:
+  persistent:
+    - id: baseline_delay
+      applies_to: link:h1->r1
+      impairments:
+        netem:
+          delay: 10ms
+          loss: 1%
+

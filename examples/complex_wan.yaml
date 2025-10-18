@@ -1,0 +1,133 @@
+# Complex WAN Topology
+# Multi-site, multi-provider topology with various impairments
+
+topology:
+  name: complex_wan
+  
+  nodes:
+    # Site 1 - West Coast
+    - id: site1-sw1
+      type: switch
+    - id: site1-r1
+      type: router
+      asn: 65001
+      daemons: [ospf, bgp]
+    
+    # Site 2 - East Coast
+    - id: site2-sw1
+      type: switch
+    - id: site2-r1
+      type: router
+      asn: 65002
+      daemons: [ospf, bgp]
+    
+    # MPLS Provider
+    - id: mpls-pe1
+      type: router
+      asn: 64700
+      daemons: [bgp]
+    - id: mpls-pe2
+      type: router
+      asn: 64700
+      daemons: [bgp]
+    
+    # Internet Provider
+    - id: inet-gw1
+      type: router
+      asn: 64800
+      daemons: [bgp]
+    - id: inet-gw2
+      type: router
+      asn: 64800
+      daemons: [bgp]
+    
+    # Cloud datacenter
+    - id: cloud-sw1
+      type: switch
+    - id: cloud-gw1
+      type: router
+      asn: 65100
+      daemons: [ospf, bgp]
+    - id: cloud-app1
+      type: host
+      services: [https, dns]
+  
+  links:
+    # Site 1 connections
+    - [site1-sw1, site1-r1, {bw: 1g, delay: 1ms}]
+    - [site1-r1, mpls-pe1, {bw: 500m, delay: 5ms}]
+    - [site1-r1, inet-gw1, {bw: 200m, delay: 15ms}]
+    
+    # Site 2 connections
+    - [site2-sw1, site2-r1, {bw: 1g, delay: 1ms}]
+    - [site2-r1, mpls-pe2, {bw: 500m, delay: 5ms}]
+    - [site2-r1, inet-gw2, {bw: 200m, delay: 15ms}]
+    
+    # MPLS backbone
+    - [mpls-pe1, mpls-pe2, {bw: 10g, delay: 40ms}]
+    
+    # Internet backbone
+    - [inet-gw1, inet-gw2, {bw: 5g, delay: 50ms, loss: 0.1}]
+    
+    # Cloud connections
+    - [cloud-sw1, cloud-gw1, {bw: 10g, delay: 1ms}]
+    - [cloud-gw1, mpls-pe2, {bw: 1g, delay: 10ms}]
+    - [cloud-gw1, inet-gw2, {bw: 1g, delay: 20ms}]
+    - [cloud-sw1, cloud-app1, {bw: 10g, delay: 1ms}]
+
+scenarios:
+  persistent:
+    # Baseline Internet path quality
+    - id: inet_baseline
+      applies_to: link:inet-gw1->inet-gw2
+      impairments:
+        netem:
+          loss: 0.5%
+          jitter: {mean: 10ms, stddev: 5ms}
+  
+  transient:
+    # Business hours congestion on MPLS
+    - id: mpls_congestion
+      schedule: "RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=17,18,19,20,21;DURATION=PT1H"
+      applies_to: link:mpls-pe1->mpls-pe2
+      impairments:
+        netem:
+          delay: 30ms
+          loss: 1%
+      description: "Business hours MPLS congestion 9am-1pm"
+    
+    # Nightly backup window
+    - id: backup_window
+      schedule: "RRULE:FREQ=DAILY;BYHOUR=2;DURATION=PT2H"
+      applies_to: path:cloud-sw1->cloud-gw1->mpls-pe2
+      impairments:
+        qdisc:
+          type: htb
+          rate: 100mbit
+      description: "Nightly backup reducing available bandwidth"
+    
+    # Random link flap
+    - id: inet_flap
+      schedule: "RRULE:FREQ=DAILY;BYHOUR=10,14,18;DURATION=PT1M"
+      applies_to: node:inet-gw1
+      impairments:
+        control_plane:
+          interface_flap:
+            down_s: 30
+      description: "Periodic Internet gateway instability"
+
+mp_ingress:
+  type: wireguard
+  assign:
+    - mp_id: mp-west-01
+      attach_to: site1-sw1
+      vrf: site1
+    
+    - mp_id: mp-east-01
+      attach_to: site2-sw1
+      vrf: site2
+    
+    - mp_id: mp-cloud-01
+      attach_to: cloud-sw1
+      vrf: cloud
+

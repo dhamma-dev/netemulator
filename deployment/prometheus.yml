@@ -1,0 +1,27 @@
+# Prometheus configuration for NetEmulator
+
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+  external_labels:
+    cluster: 'netemulator'
+    environment: 'production'
+
+scrape_configs:
+  # NetEmulator metrics
+  - job_name: 'netemulator'
+    static_configs:
+      - targets: ['localhost:8080']
+    metrics_path: '/api/v1/metrics'
+    scrape_interval: 5s
+
+  # Node exporter for system metrics
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+

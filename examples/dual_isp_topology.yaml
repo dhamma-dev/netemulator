@@ -1,0 +1,106 @@
+# Dual ISP Branch to CDN Topology
+# Demonstrates multi-path routing with scheduled impairments
+
+topology:
+  name: dual_isp_branch_to_cdn
+  
+  nodes:
+    # Branch office
+    - id: br1-sw1
+      type: switch
+    
+    - id: br1-r1
+      type: router
+      asn: 65001
+      daemons: [ospf, bgp]
+    
+    # ISP A (primary, faster but less reliable)
+    - id: ispA
+      type: router
+      asn: 64512
+      daemons: [bgp]
+    
+    # ISP B (backup, slower but stable)
+    - id: ispB
+      type: router
+      asn: 64513
+      daemons: [bgp]
+    
+    # Transit provider
+    - id: transit1
+      type: router
+      asn: 64496
+      daemons: [bgp]
+    
+    # CDN edge
+    - id: cdn-pop1
+      type: host
+      services: [http3, dns]
+  
+  links:
+    # Branch internal
+    - [br1-sw1, br1-r1, {bw: 1g, delay: 1ms}]
+    
+    # ISP A path (200Mbps, lower latency)
+    - [br1-r1, ispA, {bw: 200m, delay: 10ms}]
+    - [ispA, transit1, {bw: 2g, delay: 40ms}]
+    
+    # ISP B path (100Mbps, higher latency)
+    - [br1-r1, ispB, {bw: 100m, delay: 30ms}]
+    - [ispB, transit1, {bw: 1g, delay: 50ms}]
+    
+    # Transit to CDN
+    - [transit1, cdn-pop1, {bw: 10g, delay: 5ms}]
+
+scenarios:
+  persistent:
+    # Baseline quality on backup path
+    - id: baseline_qos_ispb
+      applies_to: link:br1-r1->ispB
+      impairments:
+        netem:
+          loss: 0.3%
+          jitter: {mean: 8ms, stddev: 3ms}
+  
+  transient:
+    # Daily lunch hour congestion on primary path
+    - id: lunch_loss_burst
+      schedule: "RRULE:FREQ=DAILY;BYHOUR=19;BYMINUTE=0;DURATION=PT15M"
+      applies_to: path:br1-r1->ispA->transit1
+      impairments:
+        netem:
+          loss: 2%
+          delay: 20ms
+      description: "Simulate lunch hour congestion 12:00-12:15 PT"
+    
+    # Weekly BGP flap on Monday mornings
+    - id: weekly_bgp_flap
+      schedule: "RRULE:FREQ=WEEKLY;BYDAY=MO;BYHOUR=16;DURATION=PT3M"
+      applies_to: node:ispA
+      impairments:
+        control_plane:
+          bgp_flap:
+            down_s: 90
+      description: "Weekly BGP maintenance window"
+    
+    # Hourly jitter spike
+    - id: hourly_jitter_spike
+      schedule: "0 * * * *"  # Cron: every hour at minute 0
+      applies_to: link:ispA->transit1
+      impairments:
+        netem:
+          jitter: {mean: 50ms, stddev: 20ms}
+      duration: PT5M
+      description: "Simulate WAN jitter spike"
+
+mp_ingress:
+  type: wireguard
+  assign:
+    - mp_id: mp-sea-01
+      attach_to: br1-r1
+      vrf: branch01
+    
+    - mp_id: mp-test-01
+      attach_to: br1-sw1
+      vrf: branch01
+
