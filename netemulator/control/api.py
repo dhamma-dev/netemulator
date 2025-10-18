@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Dict, List, Optional, Any
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, HTTPException, status, UploadFile, File, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import yaml
@@ -125,7 +125,7 @@ async def health():
 
 
 @app.post("/api/v1/topologies", status_code=status.HTTP_201_CREATED)
-async def create_topology(yaml_content: str):
+async def create_topology(yaml_content: str = Body(..., media_type="text/plain")):
     """
     Create and deploy a network topology from YAML.
     
@@ -276,7 +276,7 @@ async def delete_topology(name: str):
 
 
 @app.post("/api/v1/topologies/{name}/validate", response_model=ValidationResult)
-async def validate_topology(name: str, yaml_content: str):
+async def validate_topology(name: str, yaml_content: str = Body(..., media_type="text/plain")):
     """Validate a topology without deploying it."""
     try:
         compiler = TopologyCompiler()
