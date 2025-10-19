@@ -159,13 +159,17 @@ class NetworkTopology:
         logger.info("Assigning IP addresses to link endpoints...")
         self.link_ips = assign_node_ips(self.topology)
         
-        # Apply IPs to interfaces
+        # Apply IPs to interfaces (skip switches - they work at L2)
         for link_id, ip_config in self.link_ips.items():
             src_node_id = ip_config['src_node']
             dst_node_id = ip_config['dst_node']
             src_ip = ip_config['src']
             dst_ip = ip_config['dst']
             prefix = ip_config['prefix']
+            
+            # Get node types
+            src_node = self.topology.get_node(src_node_id)
+            dst_node = self.topology.get_node(dst_node_id)
             
             # Find the link object to get interface references
             if link_id in self.links:
@@ -174,13 +178,14 @@ class NetworkTopology:
                 # Get interfaces from the link
                 # Mininet link has .intf1 and .intf2
                 if hasattr(link, 'intf1') and hasattr(link, 'intf2'):
-                    # intf1 is on node1 (src), intf2 is on node2 (dst)
-                    logger.info(f"  {src_node_id}:{link.intf1.name} = {src_ip}/{prefix}")
-                    logger.info(f"  {dst_node_id}:{link.intf2.name} = {dst_ip}/{prefix}")
+                    # Only assign IPs to non-switch nodes
+                    if src_node and src_node.type.value != 'switch':
+                        logger.info(f"  {src_node_id}:{link.intf1.name} = {src_ip}/{prefix}")
+                        link.intf1.node.cmd(f'ip addr add {src_ip}/{prefix} dev {link.intf1.name}')
                     
-                    # Assign IPs with appropriate prefix
-                    link.intf1.node.cmd(f'ip addr add {src_ip}/{prefix} dev {link.intf1.name}')
-                    link.intf2.node.cmd(f'ip addr add {dst_ip}/{prefix} dev {link.intf2.name}')
+                    if dst_node and dst_node.type.value != 'switch':
+                        logger.info(f"  {dst_node_id}:{link.intf2.name} = {dst_ip}/{prefix}")
+                        link.intf2.node.cmd(f'ip addr add {dst_ip}/{prefix} dev {link.intf2.name}')
         
         # Build node -> primary IP mapping for routing
         node_primary_ips = {}
