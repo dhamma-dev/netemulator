@@ -149,14 +149,15 @@ def assign_node_ips(topology, base_network='10.0.0.0/16'):
     return link_ips
 
 
-def generate_static_route_commands(node_id, routes, node_ips):
+def generate_static_route_commands(node_id, routes, link_ips, topology):
     """
     Generate Linux commands to add static routes.
     
     Args:
         node_id: ID of the node to generate routes for
         routes: Dict of routes from compute_static_routes()
-        node_ips: Dict of node IPs from assign_node_ips()
+        link_ips: Dict of link IPs from assign_node_ips()
+        topology: Topology object to look up links
         
     Returns:
         List of command strings
@@ -166,11 +167,33 @@ def generate_static_route_commands(node_id, routes, node_ips):
     if node_id not in routes:
         return commands
     
+    # Build a map of node pairs to their link IPs
+    node_pair_to_ip = {}
+    for link_id, ip_config in link_ips.items():
+        src = ip_config['src_node']
+        dst = ip_config['dst_node']
+        # Store both directions
+        node_pair_to_ip[(src, dst)] = ip_config['dst']  # From src's perspective, next hop is dst's IP
+        node_pair_to_ip[(dst, src)] = ip_config['src']  # From dst's perspective, next hop is src's IP
+    
+    # Build dest node -> primary IP mapping
+    dest_ips = {}
+    for link_id, ip_config in link_ips.items():
+        src = ip_config['src_node']
+        dst = ip_config['dst_node']
+        if src not in dest_ips:
+            dest_ips[src] = ip_config['src']
+        if dst not in dest_ips:
+            dest_ips[dst] = ip_config['dst']
+    
     for dst_id, next_hop_id in routes[node_id]:
-        dst_ip = node_ips.get(dst_id)
-        next_hop_ip = node_ips.get(next_hop_id)
+        # Get destination IP
+        dst_ip = dest_ips.get(dst_id)
         
-        if dst_ip and next_hop_ip:
+        # Get next hop IP on the link between current node and next hop
+        next_hop_ip = node_pair_to_ip.get((node_id, next_hop_id))
+        
+        if dst_ip and next_hop_ip and dst_ip != next_hop_ip:
             # Add route: ip route add <dest>/32 via <next_hop>
             cmd = f"ip route add {dst_ip}/32 via {next_hop_ip}"
             commands.append(cmd)

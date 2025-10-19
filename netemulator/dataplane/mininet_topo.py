@@ -187,18 +187,6 @@ class NetworkTopology:
                         logger.info(f"  {dst_node_id}:{link.intf2.name} = {dst_ip}/{prefix}")
                         link.intf2.node.cmd(f'ip addr add {dst_ip}/{prefix} dev {link.intf2.name}')
         
-        # Build node -> primary IP mapping for routing
-        node_primary_ips = {}
-        for link_id, ip_config in self.link_ips.items():
-            src_node = ip_config['src_node']
-            dst_node = ip_config['dst_node']
-            
-            # Use the first IP we encounter as the "primary" for routing
-            if src_node not in node_primary_ips:
-                node_primary_ips[src_node] = ip_config['src']
-            if dst_node not in node_primary_ips:
-                node_primary_ips[dst_node] = ip_config['dst']
-        
         # Compute static routes
         logger.info("Computing static routes...")
         self.static_routes = compute_static_routes(self.topology)
@@ -209,7 +197,7 @@ class NetworkTopology:
         for node_id in self.static_routes:
             if node_id in self.nodes:
                 node = self.nodes[node_id]
-                commands = generate_static_route_commands(node_id, self.static_routes, node_primary_ips)
+                commands = generate_static_route_commands(node_id, self.static_routes, self.link_ips, self.topology)
                 logger.info(f"  {node_id}: adding {len(commands)} routes")
                 for cmd in commands:
                     logger.info(f"    -> {cmd}")
