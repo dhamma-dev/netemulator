@@ -176,13 +176,19 @@ class NetworkTopology:
         
         # Add static routes to nodes
         logger.info("Adding static routes to nodes...")
+        route_count = 0
         for node_id in self.static_routes:
             if node_id in self.nodes:
                 node = self.nodes[node_id]
                 commands = generate_static_route_commands(node_id, self.static_routes, self.node_ips)
+                logger.info(f"  {node_id}: adding {len(commands)} routes")
                 for cmd in commands:
-                    logger.debug(f"{node_id}: {cmd}")
-                    node.cmd(cmd)
+                    logger.info(f"    -> {cmd}")
+                    result = node.cmd(cmd)
+                    if result:
+                        logger.info(f"       Output: {result.strip()}")
+                    route_count += 1
+        logger.info(f"✓ Added {route_count} total static routes")
         
         # Configure routers
         for node in self.topology.nodes:
