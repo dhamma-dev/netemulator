@@ -13,6 +13,7 @@ from mininet.cli import CLI
 from ..models.topology import Topology, NodeType
 from .router import FRRRouter
 from .host import ServiceHost
+from ..utils.routing import compute_static_routes, assign_node_ips, generate_static_route_commands
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,8 @@ class NetworkTopology:
         self.net: Optional[Mininet] = None
         self.nodes: Dict[str, Any] = {}
         self.links: Dict[str, Any] = {}
+        self.node_ips: Dict[str, str] = {}
+        self.static_routes: Dict[str, List] = {}
         
     def build(self) -> Mininet:
         """Build the Mininet network."""
@@ -152,6 +155,35 @@ class NetworkTopology:
         logger.info("Starting network...")
         self.net.start()
         
+        # Assign IPs to nodes
+        logger.info("Assigning IP addresses to nodes...")
+        self.node_ips = assign_node_ips(self.topology)
+        
+        # Assign IPs to Mininet nodes
+        for node_id, ip in self.node_ips.items():
+            if node_id in self.nodes:
+                node = self.nodes[node_id]
+                # Get first interface (usually eth0 or similar)
+                intfs = [intf for intf in node.intfList() if intf.name != 'lo']
+                if intfs:
+                    intf = intfs[0]
+                    logger.debug(f"Assigning {ip}/8 to {node_id}:{intf.name}")
+                    node.cmd(f'ip addr add {ip}/8 dev {intf.name}')
+        
+        # Compute static routes
+        logger.info("Computing static routes...")
+        self.static_routes = compute_static_routes(self.topology)
+        
+        # Add static routes to nodes
+        logger.info("Adding static routes to nodes...")
+        for node_id in self.static_routes:
+            if node_id in self.nodes:
+                node = self.nodes[node_id]
+                commands = generate_static_route_commands(node_id, self.static_routes, self.node_ips)
+                for cmd in commands:
+                    logger.debug(f"{node_id}: {cmd}")
+                    node.cmd(cmd)
+        
         # Configure routers
         for node in self.topology.nodes:
             if node.type == NodeType.ROUTER:
@@ -166,7 +198,7 @@ class NetworkTopology:
                 if hasattr(host, 'start_services'):
                     host.start_services()
         
-        logger.info("Network started successfully")
+        logger.info("Network started successfully with static routing")
     
     def stop(self):
         """Stop the network."""
