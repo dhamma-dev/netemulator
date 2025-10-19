@@ -106,9 +106,15 @@ def assign_node_ips(topology, base_network='10.0.0.0/16'):
     """
     network = ipaddress.ip_network(base_network)
     
+    # Split the network in half to avoid overlaps
+    # First half for /24 (switch links), second half for /30 (router links)
+    halves = list(network.subnets(new_prefix=network.prefixlen + 1))
+    switch_range = halves[0]
+    router_range = halves[1] if len(halves) > 1 else halves[0]
+    
     # Separate iterators for different subnet sizes
-    subnets_24 = network.subnets(new_prefix=24)  # For switch links
-    subnets_30 = network.subnets(new_prefix=30)  # For router links
+    subnets_24 = switch_range.subnets(new_prefix=24)  # For switch links
+    subnets_30 = router_range.subnets(new_prefix=30)  # For router links
     
     link_ips = {}
     
