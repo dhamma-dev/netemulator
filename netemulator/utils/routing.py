@@ -92,25 +92,46 @@ def compute_static_routes(topology):
 
 def assign_node_ips(topology, base_network='10.0.0.0/16'):
     """
-    Assign IP addresses to link endpoints (point-to-point /30 subnets).
+    Assign IP addresses to link endpoints.
     
-    Each link gets its own /30 subnet with IPs assigned to both ends.
+    - Links with switches use /24 (LAN segments)
+    - Router-to-router links use /30 (point-to-point)
     
     Args:
         topology: Topology object
         base_network: Base network to assign from
         
     Returns:
-        Dict[link_id, {src_ip, dst_ip}] - IP assignments per link
+        Dict[link_id, {src_ip, dst_ip, prefix}] - IP assignments per link
     """
     network = ipaddress.ip_network(base_network)
-    subnets = network.subnets(new_prefix=30)  # Create /30 subnets
+    
+    # Separate iterators for different subnet sizes
+    subnets_24 = network.subnets(new_prefix=24)  # For switch links
+    subnets_30 = network.subnets(new_prefix=30)  # For router links
     
     link_ips = {}
     
-    for link_idx, link in enumerate(topology.links):
+    for link in topology.links:
+        # Check if either end is a switch
+        src_node = topology.get_node(link.src)
+        dst_node = topology.get_node(link.dst)
+        
+        is_switch_link = (
+            (src_node and src_node.type.value == 'switch') or
+            (dst_node and dst_node.type.value == 'switch')
+        )
+        
         try:
-            subnet = next(subnets)
+            if is_switch_link:
+                # Use /24 for switch links (LAN segment)
+                subnet = next(subnets_24)
+                prefix = 24
+            else:
+                # Use /30 for router-to-router links
+                subnet = next(subnets_30)
+                prefix = 30
+            
             hosts = list(subnet.hosts())
             
             # Assign first usable IP to src, second to dst
@@ -118,11 +139,12 @@ def assign_node_ips(topology, base_network='10.0.0.0/16'):
             link_ips[link_id] = {
                 'src': str(hosts[0]),
                 'dst': str(hosts[1]),
+                'prefix': prefix,
                 'src_node': link.src,
                 'dst_node': link.dst
             }
         except StopIteration:
-            raise ValueError(f"Ran out of /30 subnets in {base_network}")
+            raise ValueError(f"Ran out of subnets in {base_network}")
     
     return link_ips
 

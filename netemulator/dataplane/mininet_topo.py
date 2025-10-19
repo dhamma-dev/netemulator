@@ -165,6 +165,7 @@ class NetworkTopology:
             dst_node_id = ip_config['dst_node']
             src_ip = ip_config['src']
             dst_ip = ip_config['dst']
+            prefix = ip_config['prefix']
             
             # Find the link object to get interface references
             if link_id in self.links:
@@ -174,12 +175,12 @@ class NetworkTopology:
                 # Mininet link has .intf1 and .intf2
                 if hasattr(link, 'intf1') and hasattr(link, 'intf2'):
                     # intf1 is on node1 (src), intf2 is on node2 (dst)
-                    logger.info(f"  {src_node_id}:{link.intf1.name} = {src_ip}/30")
-                    logger.info(f"  {dst_node_id}:{link.intf2.name} = {dst_ip}/30")
+                    logger.info(f"  {src_node_id}:{link.intf1.name} = {src_ip}/{prefix}")
+                    logger.info(f"  {dst_node_id}:{link.intf2.name} = {dst_ip}/{prefix}")
                     
-                    # Assign IPs (use /30 for point-to-point links)
-                    link.intf1.node.cmd(f'ip addr add {src_ip}/30 dev {link.intf1.name}')
-                    link.intf2.node.cmd(f'ip addr add {dst_ip}/30 dev {link.intf2.name}')
+                    # Assign IPs with appropriate prefix
+                    link.intf1.node.cmd(f'ip addr add {src_ip}/{prefix} dev {link.intf1.name}')
+                    link.intf2.node.cmd(f'ip addr add {dst_ip}/{prefix} dev {link.intf2.name}')
         
         # Build node -> primary IP mapping for routing
         node_primary_ips = {}
