@@ -31,6 +31,8 @@ logging.basicConfig(
 
 # Ensure netemulator loggers are visible
 logging.getLogger('netemulator').setLevel(logging.INFO)
+logging.getLogger('netemulator.dataplane').setLevel(logging.INFO)
+logging.getLogger('netemulator.dataplane.mininet_topo').setLevel(logging.INFO)
 
 
 # API Models
