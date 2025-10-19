@@ -155,20 +155,43 @@ class NetworkTopology:
         logger.info("Starting network...")
         self.net.start()
         
-        # Assign IPs to nodes
-        logger.info("Assigning IP addresses to nodes...")
-        self.node_ips = assign_node_ips(self.topology)
+        # Assign IPs to link endpoints
+        logger.info("Assigning IP addresses to link endpoints...")
+        self.link_ips = assign_node_ips(self.topology)
         
-        # Assign IPs to Mininet nodes
-        for node_id, ip in self.node_ips.items():
-            if node_id in self.nodes:
-                node = self.nodes[node_id]
-                # Get first interface (usually eth0 or similar)
-                intfs = [intf for intf in node.intfList() if intf.name != 'lo']
-                if intfs:
-                    intf = intfs[0]
-                    logger.debug(f"Assigning {ip}/8 to {node_id}:{intf.name}")
-                    node.cmd(f'ip addr add {ip}/8 dev {intf.name}')
+        # Apply IPs to interfaces
+        for link_id, ip_config in self.link_ips.items():
+            src_node_id = ip_config['src_node']
+            dst_node_id = ip_config['dst_node']
+            src_ip = ip_config['src']
+            dst_ip = ip_config['dst']
+            
+            # Find the link object to get interface references
+            if link_id in self.links:
+                link = self.links[link_id]
+                
+                # Get interfaces from the link
+                # Mininet link has .intf1 and .intf2
+                if hasattr(link, 'intf1') and hasattr(link, 'intf2'):
+                    # intf1 is on node1 (src), intf2 is on node2 (dst)
+                    logger.info(f"  {src_node_id}:{link.intf1.name} = {src_ip}/30")
+                    logger.info(f"  {dst_node_id}:{link.intf2.name} = {dst_ip}/30")
+                    
+                    # Assign IPs (use /30 for point-to-point links)
+                    link.intf1.node.cmd(f'ip addr add {src_ip}/30 dev {link.intf1.name}')
+                    link.intf2.node.cmd(f'ip addr add {dst_ip}/30 dev {link.intf2.name}')
+        
+        # Build node -> primary IP mapping for routing
+        node_primary_ips = {}
+        for link_id, ip_config in self.link_ips.items():
+            src_node = ip_config['src_node']
+            dst_node = ip_config['dst_node']
+            
+            # Use the first IP we encounter as the "primary" for routing
+            if src_node not in node_primary_ips:
+                node_primary_ips[src_node] = ip_config['src']
+            if dst_node not in node_primary_ips:
+                node_primary_ips[dst_node] = ip_config['dst']
         
         # Compute static routes
         logger.info("Computing static routes...")
@@ -180,7 +203,7 @@ class NetworkTopology:
         for node_id in self.static_routes:
             if node_id in self.nodes:
                 node = self.nodes[node_id]
-                commands = generate_static_route_commands(node_id, self.static_routes, self.node_ips)
+                commands = generate_static_route_commands(node_id, self.static_routes, node_primary_ips)
                 logger.info(f"  {node_id}: adding {len(commands)} routes")
                 for cmd in commands:
                     logger.info(f"    -> {cmd}")

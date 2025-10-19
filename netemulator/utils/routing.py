@@ -90,34 +90,41 @@ def compute_static_routes(topology):
     return routes
 
 
-def assign_node_ips(topology, base_network='10.0.0.0/24'):
+def assign_node_ips(topology, base_network='10.0.0.0/16'):
     """
-    Assign IP addresses to nodes.
+    Assign IP addresses to link endpoints (point-to-point /30 subnets).
     
-    Simple scheme: Sequential IPs starting from base_network.
+    Each link gets its own /30 subnet with IPs assigned to both ends.
     
     Args:
         topology: Topology object
         base_network: Base network to assign from
         
     Returns:
-        Dict[node_id, ip_address_string]
+        Dict[link_id, {src_ip, dst_ip}] - IP assignments per link
     """
     network = ipaddress.ip_network(base_network)
-    hosts = list(network.hosts())
+    subnets = network.subnets(new_prefix=30)  # Create /30 subnets
     
-    node_ips = {}
-    ip_index = 0
+    link_ips = {}
     
-    for node in topology.nodes:
-        if node.type.value != 'switch':  # Switches don't need IPs
-            node_ips[node.id] = str(hosts[ip_index])
-            ip_index += 1
+    for link_idx, link in enumerate(topology.links):
+        try:
+            subnet = next(subnets)
+            hosts = list(subnet.hosts())
             
-            if ip_index >= len(hosts):
-                raise ValueError(f"Ran out of IPs in {base_network}")
+            # Assign first usable IP to src, second to dst
+            link_id = f"{link.src}-{link.dst}"
+            link_ips[link_id] = {
+                'src': str(hosts[0]),
+                'dst': str(hosts[1]),
+                'src_node': link.src,
+                'dst_node': link.dst
+            }
+        except StopIteration:
+            raise ValueError(f"Ran out of /30 subnets in {base_network}")
     
-    return node_ips
+    return link_ips
 
 
 def generate_static_route_commands(node_id, routes, node_ips):
