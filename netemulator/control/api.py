@@ -19,7 +19,18 @@ from ..dataplane.mininet_topo import NetworkTopology, create_network
 from ..control.scheduler import ScenarioScheduler
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+# Configure logging to capture all loggers
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+
+# Ensure netemulator loggers are visible
+logging.getLogger('netemulator').setLevel(logging.INFO)
 
 
 # API Models
